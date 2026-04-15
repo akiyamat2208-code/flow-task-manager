@@ -725,6 +725,13 @@ function openEditTask(gid,mid,t){ editingGid=gid;editingMid=mid;editingTid=t.id;
 function saveTask(){ const name=document.getElementById('mName').value.trim(); if(!name)return; const todos=JSON.parse(JSON.stringify(editingTodos)); const prog=todos.length===0?0:Math.round(todos.filter(t=>t.done).length/todos.length*100); const g=data.goals.find(g=>g.id===editingGid); const ms=g.milestones.find(m=>m.id===editingMid); const obj={id:editingTid||uid(),name,start:document.getElementById('mStart').value,end:document.getElementById('mEnd').value,prog,done:prog===100,todos}; if(editingTid){const i=ms.tasks.findIndex(t=>t.id===editingTid);ms.tasks[i]=obj;}else ms.tasks.push(obj); closeModal();render(); }
 function deleteTask(){ const g=data.goals.find(g=>g.id===editingGid); const ms=g.milestones.find(m=>m.id===editingMid); ms.tasks=ms.tasks.filter(t=>t.id!==editingTid); closeModal();render(); }
 
+/* ---- Google Drive Sync (vars declared early for use in saveToStorage) ---- */
+const GDRIVE_CLIENT_ID = '1015222236443-dp5fh1en6hrl6slbgvfuqbaei2m1adja.apps.googleusercontent.com';
+const GDRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+const GDRIVE_FILE_NAME = 'flow-task-manager-data.json';
+let gdriveToken = null;
+let gdriveFileId = null;
+
 /* ---- Local Storage ---- */
 const STORAGE_KEY = 'flow-task-manager-v1';
 
@@ -734,6 +741,13 @@ function saveToStorage(){
     const el = document.getElementById('saveIndicator');
     if(el){ el.textContent = '保存済み'; clearTimeout(el._t); el._t = setTimeout(()=>{ el.textContent=''; }, 2000); }
   } catch(e){}
+  // Auto-sync to Drive if logged in (debounced 3s)
+  if(gdriveToken){
+    clearTimeout(saveToStorage._driveTimer);
+    saveToStorage._driveTimer = setTimeout(()=>{
+      saveToDrive().then(()=>showDriveStatus('ドライブに自動保存しました')).catch(()=>{});
+    }, 3000);
+  }
 }
 
 function loadFromStorage(){
@@ -1007,7 +1021,16 @@ function renderMemoGrid(){
     try { el.value = localStorage.getItem(`${MEMO_KEY}-${n}`) || ''; } catch(e){}
     el.addEventListener('input', ()=>{
       clearTimeout(el._mt);
-      el._mt = setTimeout(()=>{ try { localStorage.setItem(`${MEMO_KEY}-${n}`, el.value); showMemoSaved(); } catch(e){} }, 600);
+      el._mt = setTimeout(()=>{
+        try { localStorage.setItem(`${MEMO_KEY}-${n}`, el.value); showMemoSaved(); } catch(e){}
+        // Auto-sync to Drive if logged in
+        if(gdriveToken){
+          clearTimeout(el._driveTimer);
+          el._driveTimer = setTimeout(()=>{
+            saveToDrive().then(()=>showDriveStatus('ドライブに自動保存しました')).catch(()=>{});
+          }, 3000);
+        }
+      }, 600);
     });
   }
 }
@@ -1041,12 +1064,7 @@ loadFromStorage();
 render();
 loadMemo();
 
-/* ---- Google Drive Sync ---- */
-const GDRIVE_CLIENT_ID = '1015222236443-dp5fh1en6hrl6slbgvfuqbaei2m1adja.apps.googleusercontent.com';
-const GDRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
-const GDRIVE_FILE_NAME = 'flow-task-manager-data.json';
-let gdriveToken = null;
-let gdriveFileId = null;
+/* ---- Google Drive Sync (functions) ---- */
 
 function handleDriveAuth(){
   if(gdriveToken){
@@ -1070,13 +1088,15 @@ function updateDriveBtn(connected){
   const btn = document.getElementById('btnDrive');
   if(!btn) return;
   if(connected){
-    btn.textContent = '☁ 同期する';
+    btn.textContent = '☁ 自動同期中';
     btn.style.color = 'var(--green-dark)';
     btn.style.borderColor = 'var(--green)';
+    btn.title = 'クリックで今すぐ同期';
   } else {
     btn.textContent = '☁ ドライブ連携';
     btn.style.color = 'var(--text-2)';
     btn.style.borderColor = '';
+    btn.title = 'Googleドライブと同期';
   }
 }
 
@@ -1101,37 +1121,31 @@ async function syncFromDrive(){
   try {
     const found = await findDriveFile();
     if(!found){
-      // No file yet — save current data to drive
+      // ドライブにデータなし → 現在のデータを保存
       await saveToDrive();
       showDriveStatus('ドライブに初回保存しました');
       return;
     }
-    // File exists — fetch and compare
+    // ドライブのデータを取得
     const res = await fetch(
       `https://www.googleapis.com/drive/v3/files/${gdriveFileId}?alt=media`,
       { headers: { 'Authorization': 'Bearer ' + gdriveToken } }
     );
     const driveData = await res.json();
-    if(!driveData || !driveData.goals){ await saveToDrive(); return; }
-
-    // Ask user which to use
-    const useLocal = confirm(
-      'Googleドライブにデータが見つかりました。\n\n' +
-      '「OK」→ ドライブのデータを読み込む（このデバイスのデータを上書き）\n' +
-      '「キャンセル」→ このデバイスのデータをドライブに保存'
-    );
-    if(useLocal){
-      const { _memos, _memoCols, _todo1, ...coreData } = driveData;
-      data = coreData;
-      if(_memos){ Object.entries(_memos).forEach(([n,v])=>{ try{localStorage.setItem(`${MEMO_KEY}-${n}`,v);}catch(e){} }); }
-      if(_memoCols){ try{localStorage.setItem(MEMO_COLS_KEY,_memoCols);memoCols=_memoCols;}catch(e){} }
-      if(_todo1){ try{localStorage.setItem(TODO1_KEY,JSON.stringify(_todo1));todo1Items=_todo1;}catch(e){} }
-      saveToStorage(); render(); renderMemoGrid();
-      showDriveStatus('ドライブから読み込みました');
-    } else {
+    if(!driveData || !driveData.goals){
+      // ドライブのデータが壊れている → 現在のデータで上書き保存
       await saveToDrive();
       showDriveStatus('ドライブに保存しました');
+      return;
     }
+    // ドライブのデータを優先して読み込む
+    const { _memos, _memoCols, _todo1, ...coreData } = driveData;
+    data = coreData;
+    if(_memos){ Object.entries(_memos).forEach(([n,v])=>{ try{localStorage.setItem(`${MEMO_KEY}-${n}`,v);}catch(e){} }); }
+    if(_memoCols){ try{localStorage.setItem(MEMO_COLS_KEY,_memoCols);memoCols=parseInt(_memoCols);}catch(e){} }
+    if(_todo1){ try{localStorage.setItem(TODO1_KEY,JSON.stringify(_todo1));todo1Items=_todo1;}catch(e){} }
+    saveToStorage(); render(); renderMemoGrid();
+    showDriveStatus('ドライブから読み込みました');
   } catch(e){ alert('ドライブとの同期に失敗しました: ' + e.message); }
 }
 
