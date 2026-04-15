@@ -169,11 +169,6 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
-<div id="g_id_onload"
-  data-client_id="1015222236443-dp5fh1en6hrl6slbgvfuqbaei2m1adja.apps.googleusercontent.com"
-  data-auto_select="true"
-  data-cancel_on_tap_outside="false">
-</div>
 <div class="app">
   <div class="app-header">
     <h1 class="app-title">フロー・<span>タスク管理</span>アプリ</h1>
@@ -1082,6 +1077,7 @@ function handleDriveAuth(){
     callback: (resp) => {
       if(resp.error){ alert('認証に失敗しました: ' + resp.error); return; }
       gdriveToken = resp.access_token;
+      localStorage.setItem(GDRIVE_LOGIN_KEY, '1'); // ログイン済みフラグを保存
       updateDriveBtn(true);
       syncFromDrive();
     }
@@ -1197,37 +1193,18 @@ function showDriveStatus(msg){
   if(el){ el.textContent = msg; clearTimeout(el._t); el._t = setTimeout(()=>{ el.textContent=''; }, 3000); }
 }
 
-/* ---- Auto login with Google One Tap ---- */
-let gdriveIdToken = null;
+/* ---- Auto login ---- */
+const GDRIVE_LOGIN_KEY = 'flow-task-gdrive-autologin';
 
 function autoLoginDrive(){
   if(typeof google === 'undefined' || !google.accounts){
     setTimeout(autoLoginDrive, 500);
     return;
   }
+  // 以前ログイン済みなら自動でトークン取得
+  const wasLoggedIn = localStorage.getItem(GDRIVE_LOGIN_KEY) === '1';
+  if(!wasLoggedIn){ return; }
 
-  // One Tap: silently gets credential if user was previously logged in
-  google.accounts.id.initialize({
-    client_id: GDRIVE_CLIENT_ID,
-    auto_select: true, // 以前ログイン済みなら自動選択
-    callback: (credResp) => {
-      gdriveIdToken = credResp.credential;
-      // IDトークンを使ってDriveアクセストークンを取得
-      requestDriveToken();
-    },
-    cancel_on_tap_outside: false,
-  });
-
-  // サイレント認証を試みる（ポップアップなし）
-  google.accounts.id.prompt((notification) => {
-    if(notification.isNotDisplayed() || notification.isSkippedMoment()){
-      // One Tap使えない場合はトークンクライアントで試みる
-      requestDriveTokenSilent();
-    }
-  });
-}
-
-function requestDriveToken(){
   const client = google.accounts.oauth2.initTokenClient({
     client_id: GDRIVE_CLIENT_ID,
     scope: GDRIVE_SCOPE,
@@ -1242,28 +1219,7 @@ function requestDriveToken(){
   client.requestAccessToken({ prompt: '' });
 }
 
-function requestDriveTokenSilent(){
-  const client = google.accounts.oauth2.initTokenClient({
-    client_id: GDRIVE_CLIENT_ID,
-    scope: GDRIVE_SCOPE,
-    prompt: '',
-    callback: (resp) => {
-      if(resp.error){ updateDriveBtn(false); return; }
-      gdriveToken = resp.access_token;
-      updateDriveBtn(true);
-      syncFromDrive();
-    }
-  });
-  try {
-    client.requestAccessToken({ prompt: 'none' });
-  } catch(e){
-    updateDriveBtn(false);
-  }
-}
-
-window.addEventListener('load', () => {
-  setTimeout(autoLoginDrive, 800);
-});
+window.addEventListener('load', () => { setTimeout(autoLoginDrive, 800); });
 </script>
 </body>
 </html>
