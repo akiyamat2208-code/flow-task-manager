@@ -166,7 +166,7 @@
     #memoInnerLayout { grid-template-columns:1fr 1fr !important; }
   }
 </style>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://accounts.google.com/gsi/client" defer></script>
 </head>
 <body>
 <div class="app">
@@ -1067,33 +1067,26 @@ loadMemo();
 /* ---- Google Drive Sync (functions) ---- */
 
 function handleDriveAuth(){
+  if(typeof google === 'undefined' || !google.accounts){
+    alert('Googleの認証ライブラリがまだ読み込まれていません。少し待ってから再度タップしてください。');
+    return;
+  }
   if(gdriveToken){
     syncToDrive();
     return;
   }
-  const wasLoggedIn = localStorage.getItem(GDRIVE_LOGIN_KEY) === '1';
   const client = google.accounts.oauth2.initTokenClient({
     client_id: GDRIVE_CLIENT_ID,
     scope: GDRIVE_SCOPE,
-    prompt: wasLoggedIn ? 'none' : 'consent',
     callback: (resp) => {
-      if(resp.error){
-        // prompt:none失敗 → 通常ログインで再試行
-        if(wasLoggedIn){
-          localStorage.removeItem(GDRIVE_LOGIN_KEY);
-          handleDriveAuth();
-          return;
-        }
-        alert('認証に失敗しました: ' + resp.error);
-        return;
-      }
+      if(resp.error){ alert('認証に失敗しました: ' + resp.error); return; }
       gdriveToken = resp.access_token;
       localStorage.setItem(GDRIVE_LOGIN_KEY, '1');
       updateDriveBtn(true);
       syncFromDrive();
     }
   });
-  client.requestAccessToken({ prompt: wasLoggedIn ? 'none' : '' });
+  client.requestAccessToken();
 }
 
 function updateDriveBtn(connected){
@@ -1102,13 +1095,15 @@ function updateDriveBtn(connected){
   if(connected){
     btn.textContent = '☁ 自動同期中';
     btn.style.color = 'var(--green-dark)';
-    btn.style.borderColor = 'var(--green)';
+    btn.style.borderColor = '#4DC87A';
+    btn.style.background = 'var(--green-bg)';
     btn.title = 'クリックで今すぐ同期';
   } else {
     btn.textContent = '☁ ドライブ連携';
     btn.style.color = 'var(--text-2)';
     btn.style.borderColor = '';
-    btn.title = 'Googleドライブと同期';
+    btn.style.background = '';
+    btn.title = 'タップしてGoogleドライブと同期';
   }
 }
 
