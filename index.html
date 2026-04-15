@@ -1201,22 +1201,26 @@ function autoLoginDrive(){
     setTimeout(autoLoginDrive, 500);
     return;
   }
-  // 以前ログイン済みなら自動でトークン取得
   const wasLoggedIn = localStorage.getItem(GDRIVE_LOGIN_KEY) === '1';
   if(!wasLoggedIn){ return; }
 
   const client = google.accounts.oauth2.initTokenClient({
     client_id: GDRIVE_CLIENT_ID,
     scope: GDRIVE_SCOPE,
-    prompt: '',
+    prompt: 'none',
     callback: (resp) => {
-      if(resp.error){ updateDriveBtn(false); return; }
+      if(resp.error){
+        // サイレント失敗 → フラグ消してボタンで手動ログインを促す
+        localStorage.removeItem(GDRIVE_LOGIN_KEY);
+        updateDriveBtn(false);
+        return;
+      }
       gdriveToken = resp.access_token;
       updateDriveBtn(true);
       syncFromDrive();
     }
   });
-  client.requestAccessToken({ prompt: '' });
+  client.requestAccessToken({ prompt: 'none' });
 }
 
 window.addEventListener('load', () => { setTimeout(autoLoginDrive, 800); });
