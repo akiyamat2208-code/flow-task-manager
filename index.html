@@ -1191,6 +1191,41 @@ function showDriveStatus(msg){
   const el = document.getElementById('saveIndicator');
   if(el){ el.textContent = msg; clearTimeout(el._t); el._t = setTimeout(()=>{ el.textContent=''; }, 3000); }
 }
+
+/* ---- Auto login on page load ---- */
+function autoLoginDrive(){
+  if(typeof google === 'undefined' || !google.accounts) {
+    // GIS script not loaded yet, retry
+    setTimeout(autoLoginDrive, 500);
+    return;
+  }
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: GDRIVE_CLIENT_ID,
+    scope: GDRIVE_SCOPE,
+    prompt: '', // サイレント認証を試みる（以前にログイン済みなら自動）
+    callback: (resp) => {
+      if(resp.error){
+        // サイレント認証失敗 → ボタンで手動ログインを促す
+        updateDriveBtn(false);
+        return;
+      }
+      gdriveToken = resp.access_token;
+      updateDriveBtn(true);
+      syncFromDrive();
+    }
+  });
+  // prompt:'none' で自動取得を試みる
+  try {
+    client.requestAccessToken({ prompt: 'none' });
+  } catch(e) {
+    updateDriveBtn(false);
+  }
+}
+
+// GISスクリプト読み込み後に自動ログイン
+window.addEventListener('load', () => {
+  setTimeout(autoLoginDrive, 800);
+});
 </script>
 </body>
 </html>
