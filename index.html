@@ -978,28 +978,27 @@ function makeTodo1Row(item){
       }
       saveTodo1();
     }
-    // Delete キーで行頭にいるとき → この行を上の行末に結合
+    // Delete キーで行頭にいるとき → この行のテキストを上の行末に結合
     if(e.key === 'Delete'){
       const sel = window.getSelection();
-      const isAtEnd = sel && sel.rangeCount > 0 &&
+      const isAtStart = sel && sel.rangeCount > 0 &&
         sel.getRangeAt(0).toString() === '' &&
-        sel.getRangeAt(0).startOffset === (txt.textContent || '').length;
-      if(isAtEnd){
+        sel.getRangeAt(0).startOffset === 0;
+      if(isAtStart){
         const idx = todo1Items.findIndex(x=>x.id===item.id);
-        if(idx < todo1Items.length-1){
+        if(idx > 0){
           e.preventDefault();
           pushTodo1History();
-          // 次の行のテキストをこの行末に結合
-          const nextItem = todo1Items[idx+1];
-          const mergedText = item.text + nextItem.text;
-          const cursorPos = item.text.length;
-          item.text = mergedText;
-          todo1Items.splice(idx+1, 1);
+          // 上の行のテキストにこの行のテキストを結合
+          const prevItem = todo1Items[idx-1];
+          const cursorPos = prevItem.text.length; // 上の行末の位置
+          prevItem.text = prevItem.text + item.text;
+          todo1Items.splice(idx, 1);
           renderTodo1();
-          // カーソルを結合位置に
-          const curRow = document.getElementById(`t1-${item.id}`);
-          if(curRow){
-            const t = curRow.querySelector('.todo1-text');
+          // 上の行のカーソル位置（結合箇所）にフォーカス
+          const prevRow = document.getElementById(`t1-${prevItem.id}`);
+          if(prevRow){
+            const t = prevRow.querySelector('.todo1-text');
             if(t){
               t.focus();
               try {
@@ -1007,7 +1006,7 @@ function makeTodo1Row(item){
                 const s = window.getSelection();
                 const node = t.firstChild || t;
                 const pos = Math.min(cursorPos, (t.textContent||'').length);
-                r.setStart(node === t ? t : node, node === t ? 0 : pos);
+                r.setStart(node, pos);
                 r.collapse(true);
                 s.removeAllRanges();
                 s.addRange(r);
