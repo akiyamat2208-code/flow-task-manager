@@ -818,7 +818,17 @@ let memoCols = 3;
 let todo1Items = []; // [{id, text, done}]
 
 /* --- First-domain TODO panel --- */
-function saveTodo1(){ try { localStorage.setItem(TODO1_KEY, JSON.stringify(todo1Items)); } catch(e){} showMemoSaved(); }
+function saveTodo1(){
+  try { localStorage.setItem(TODO1_KEY, JSON.stringify(todo1Items)); } catch(e){}
+  showMemoSaved();
+  // ドライブにも自動保存
+  if(gdriveToken){
+    clearTimeout(saveTodo1._driveTimer);
+    saveTodo1._driveTimer = setTimeout(()=>{
+      saveToDrive().then(()=>showDriveStatus('ドライブに自動保存しました')).catch(()=>{});
+    }, 3000);
+  }
+}
 
 function renderTodo1(){
   const panel = document.getElementById('todo1Panel');
@@ -920,7 +930,22 @@ function makeTodo1Row(item){
       }
       saveTodo1();
     }
-    if(e.key === 'Backspace' && txt.textContent === ''){
+    if(e.key === 'ArrowUp'){
+      const idx = todo1Items.findIndex(x=>x.id===item.id);
+      if(idx > 0){
+        e.preventDefault();
+        const prev = document.getElementById(`t1-${todo1Items[idx-1].id}`);
+        if(prev){ const t=prev.querySelector('.todo1-text'); if(t){ t.focus(); placeCursorAtEnd(t); } }
+      }
+    }
+    if(e.key === 'ArrowDown'){
+      const idx = todo1Items.findIndex(x=>x.id===item.id);
+      if(idx < todo1Items.length-1){
+        e.preventDefault();
+        const next = document.getElementById(`t1-${todo1Items[idx+1].id}`);
+        if(next){ const t=next.querySelector('.todo1-text'); if(t){ t.focus(); } }
+      }
+    }
       e.preventDefault();
       const idx = todo1Items.findIndex(x=>x.id===item.id);
       todo1Items.splice(idx, 1);
