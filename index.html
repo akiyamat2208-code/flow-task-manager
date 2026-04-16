@@ -1065,17 +1065,12 @@ render();
 loadMemo();
 
 /* ---- Google Drive Sync (functions) ---- */
+const GDRIVE_LOGIN_KEY = 'flow-task-gdrive-autologin';
+let _driveClient = null;
 
-function handleDriveAuth(){
-  if(typeof google === 'undefined' || !google.accounts){
-    alert('Googleの認証ライブラリがまだ読み込まれていません。少し待ってから再度タップしてください。');
-    return;
-  }
-  if(gdriveToken){
-    syncToDrive();
-    return;
-  }
-  const client = google.accounts.oauth2.initTokenClient({
+function getDriveClient(){
+  if(_driveClient) return _driveClient;
+  _driveClient = google.accounts.oauth2.initTokenClient({
     client_id: GDRIVE_CLIENT_ID,
     scope: GDRIVE_SCOPE,
     callback: (resp) => {
@@ -1086,7 +1081,16 @@ function handleDriveAuth(){
       syncFromDrive();
     }
   });
-  client.requestAccessToken();
+  return _driveClient;
+}
+
+function handleDriveAuth(){
+  if(typeof google === 'undefined' || !google.accounts){
+    alert('Googleの認証ライブラリがまだ読み込まれていません。少し待ってから再度タップしてください。');
+    return;
+  }
+  if(gdriveToken){ syncToDrive(); return; }
+  getDriveClient().requestAccessToken();
 }
 
 function updateDriveBtn(connected){
@@ -1128,25 +1132,31 @@ async function syncFromDrive(){
   try {
     const found = await findDriveFile();
     if(!found){
-      // ドライブにデータなし → 現在のデータを保存
       await saveToDrive();
       showDriveStatus('ドライブに初回保存しました');
       return;
     }
-    // ドライブのデータを取得
     const res = await fetch(
       `https://www.googleapis.com/drive/v3/files/${gdriveFileId}?alt=media`,
       { headers: { 'Authorization': 'Bearer ' + gdriveToken } }
     );
     const driveData = await res.json();
     if(!driveData || !driveData.goals){
-      // ドライブのデータが壊れている → 現在のデータで上書き保存
       await saveToDrive();
       showDriveStatus('ドライブに保存しました');
       return;
     }
-    // ドライブのデータを優先して読み込む
-    const { _memos, _memoCols, _todo1, ...coreData } = driveData;
+    // タイムスタンプ比較：ローカルの方が新しければ確認
+    const localTs = parseInt(localStorage.getItem('flow-task-ts') || '0');
+    const driveTs = parseInt(driveData._ts || '0');
+    if(localTs > driveTs && localTs - driveTs > 60000){
+      const useLocal = confirm(
+        'このデバイスのデータの方が新しいです。\n\n「OK」→ このデバイスのデータを保存\n「キャンセル」→ ドライブのデータを読み込む'
+      );
+      if(useLocal){ await saveToDrive(); showDriveStatus('ドライブに保存しました'); return; }
+    }
+    // ドライブのデータを読み込む
+    const { _memos, _memoCols, _todo1, _ts, ...coreData } = driveData;
     data = coreData;
     if(_memos){ Object.entries(_memos).forEach(([n,v])=>{ try{localStorage.setItem(`${MEMO_KEY}-${n}`,v);}catch(e){} }); }
     if(_memoCols){ try{localStorage.setItem(MEMO_COLS_KEY,_memoCols);memoCols=parseInt(_memoCols);}catch(e){} }
@@ -1157,13 +1167,14 @@ async function syncFromDrive(){
 }
 
 async function saveToDrive(){
-  // Collect memo data
   const memos = {};
   for(let n=1; n<=memoCols; n++){
     const el = document.getElementById(`freememo${n}`);
     try{ memos[n] = el ? el.value : (localStorage.getItem(`${MEMO_KEY}-${n}`) || ''); }catch(e){ memos[n]=''; }
   }
-  const payload = JSON.stringify({ ...data, _memos: memos, _memoCols: memoCols, _todo1: todo1Items });
+  const ts = Date.now();
+  localStorage.setItem('flow-task-ts', ts);
+  const payload = JSON.stringify({ ...data, _memos: memos, _memoCols: memoCols, _todo1: todo1Items, _ts: ts });
 
   if(gdriveFileId){
     // Update existing file
@@ -1200,13 +1211,15 @@ function showDriveStatus(msg){
 }
 
 /* ---- Auto login ---- */
-const GDRIVE_LOGIN_KEY = 'flow-task-gdrive-autologin';
-
 function autoLoginDrive(){
-  // 自動ポップアップはしない。ボタン1クリックでログイン。
+  if(typeof google === 'undefined' || !google.accounts){
+    setTimeout(autoLoginDrive, 500);
+    return;
+  }
+  // 起動時に自動でログイン画面を表示
+  getDriveClient().requestAccessToken();
 }
-
-window.addEventListener('load', () => { setTimeout(autoLoginDrive, 800); });
+window.addEventListener('load', () => { setTimeout(autoLoginDrive, 1000); });
 </script>
 </body>
 </html>
