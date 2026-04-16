@@ -1033,12 +1033,8 @@ function makeTodo1Row(item){
     }
   });
   txt.addEventListener('blur', () => {
-    // Remove empty rows that are not the only one
-    if(txt.textContent.trim()==='' && todo1Items.length>1){
-      const idx = todo1Items.findIndex(x=>x.id===item.id);
-      todo1Items.splice(idx,1);
-      renderTodo1(); saveTodo1();
-    }
+    // blurでの自動削除はしない（renderTodo1時にblurが発火して上の行が消えるバグの原因）
+    // 空行は次回Enter/Backspace操作時に整理される
   });
 
   row.appendChild(chk);
