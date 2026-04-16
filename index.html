@@ -484,17 +484,27 @@ function render(){
           const tdT=t.todos?t.todos.length:0, tdD=t.todos?t.todos.filter(x=>x.done).length:0;
           const badge=tdT>0?`<span class="todo-badge">${tdD}/${tdT}</span>`:'';
           const taskOpacity = ms.done ? 'opacity:0.45;' : '';
-          html+=`<div class="gantt-row" style="min-width:${minW}px;${taskOpacity}">
+          // 未完了TODOのみ取得
+          const incompleteTodos = t.todos ? t.todos.filter(x=>!x.done) : [];
+          const todoListHTML = incompleteTodos.length > 0
+            ? incompleteTodos.map(td=>`<div style="position:relative;left:${tx1}px;max-width:${tw}px;display:flex;align-items:center;gap:3px;padding:1px 0;">
+                <span style="width:7px;height:7px;border-radius:2px;border:1px solid var(--border-md);flex-shrink:0;display:inline-block;background:transparent"></span>
+                <span style="font-size:10px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3">${esc(td.name)}</span>
+              </div>`).join('')
+            : '';
+          const rowHeight = incompleteTodos.length > 0 ? `min-height:calc(var(--row-h) + ${incompleteTodos.length * 16}px)` : '';
+          html+=`<div class="gantt-row" style="min-width:${minW}px;${taskOpacity}${rowHeight}">
             <div class="row-label" style="padding-left:38px;cursor:pointer" data-edit-task="${g.id}:${ms.id}:${t.id}">
               <span class="toggle" style="color:var(--text-3)">—</span>
               <span class="row-name task">${esc(t.name)}</span>
             </div>
-            <div class="row-chart" style="width:${totalW}px">
+            <div class="row-chart" style="width:${totalW}px;flex-direction:column;align-items:flex-start;padding:4px 0;">
               ${stripes()}${todayLine()}
-              <div class="bar ${cls}" style="left:${tx1}px;width:${tw}px" data-edit-task="${g.id}:${ms.id}:${t.id}">
+              <div class="bar ${cls}" style="left:${tx1}px;width:${tw}px;position:relative;transform:none;top:auto;flex-shrink:0" data-edit-task="${g.id}:${ms.id}:${t.id}">
                 <div class="bar-fill" style="width:${fw}px"></div>
                 <div class="bar-text">${esc(t.name)} ${prog}%${badge}</div>
               </div>
+              ${todoListHTML ? `<div style="position:relative;padding-top:2px">${todoListHTML}</div>` : ''}
             </div>
           </div>`;
         });
