@@ -871,16 +871,15 @@ function makeTodo1Row(item){
   txt.addEventListener('keydown', e => {
     if(e.key === 'Enter'){
       if(e.shiftKey){
-        // Shift+Enter: allow default browser line break inside contenteditable
+        // Shift+Enter: 行内改行（ブラウザのデフォルト動作）
         return;
       }
+      // Enter: 新しいチェックボックス付きアイテムを追加
       e.preventDefault();
-      // Insert new item after this one
       const idx = todo1Items.findIndex(x=>x.id===item.id);
       const newItem = {id:uid(), text:'', done:false};
       todo1Items.splice(idx+1, 0, newItem);
       renderTodo1();
-      // Focus new row
       const newRow = document.getElementById(`t1-${newItem.id}`);
       if(newRow){ const t=newRow.querySelector('.todo1-text'); if(t){t.focus();} }
       saveTodo1();
@@ -890,7 +889,6 @@ function makeTodo1Row(item){
       const idx = todo1Items.findIndex(x=>x.id===item.id);
       todo1Items.splice(idx, 1);
       renderTodo1();
-      // Focus previous row
       if(idx > 0){
         const prev = document.getElementById(`t1-${todo1Items[idx-1].id}`);
         if(prev){ const t=prev.querySelector('.todo1-text'); if(t){ t.focus(); placeCursorAtEnd(t); } }
@@ -938,20 +936,34 @@ function toggleTodo1(id){
   const item = todo1Items.find(x=>x.id===id);
   if(!item) return;
   item.done = !item.done;
+  // 完了日を記録（翌0時に削除するため）
+  if(item.done){
+    item.doneDate = toISO(new Date());
+  } else {
+    delete item.doneDate;
+  }
   const row = document.getElementById(`t1-${id}`);
   if(row){
     const chk=row.querySelector('.todo1-check'); if(chk) chk.className=`todo1-check${item.done?' checked':''}`;
     const txt=row.querySelector('.todo1-text'); if(txt) txt.className=`todo1-text${item.done?' done':''}`;
   }
   saveTodo1();
-  if(item.done){
-    // Auto-remove after 1.2s so user can see the checkmark briefly
-    setTimeout(()=>{
-      todo1Items = todo1Items.filter(x=>x.id!==id);
-      renderTodo1(); saveTodo1();
-    }, 1200);
-  }
+  // 自動削除しない → 0時に削除
 }
+
+/* 0時に完了済みアイテムを削除 */
+function schedMidnightCleanup(){
+  const now = new Date();
+  const msToMidnight = new Date(now.getFullYear(),now.getMonth(),now.getDate()+1,0,0,5) - now;
+  setTimeout(()=>{
+    const today = toISO(new Date());
+    const before = todo1Items.length;
+    todo1Items = todo1Items.filter(x => !(x.done && x.doneDate && x.doneDate < today));
+    if(todo1Items.length !== before){ renderTodo1(); saveTodo1(); }
+    schedMidnightCleanup(); // 次の0時もセット
+  }, msToMidnight);
+}
+schedMidnightCleanup();
 
 function buildTodo1Panel(){
   return `<div class="todo1-panel" id="todo1Panel" onclick="focusTodo1IfEmpty(event)">
