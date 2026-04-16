@@ -946,6 +946,7 @@ function makeTodo1Row(item){
         if(next){ const t=next.querySelector('.todo1-text'); if(t){ t.focus(); } }
       }
     }
+    if(e.key === 'Backspace' && txt.textContent === ''){
       e.preventDefault();
       const idx = todo1Items.findIndex(x=>x.id===item.id);
       todo1Items.splice(idx, 1);
