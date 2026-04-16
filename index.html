@@ -1000,7 +1000,12 @@ function makeTodo1Row(item){
           }
         } else {
           // 行頭でBackspace または 行頭でDelete: 上の行末に結合
+          // DOM上の最新テキストをitemに同期してから結合
+          item.text = txt.textContent || '';
           const prevItem = todo1Items[idx-1];
+          // 上の行のDOMテキストも同期
+          const prevRow0 = document.getElementById(`t1-${prevItem.id}`);
+          if(prevRow0){ const pt=prevRow0.querySelector('.todo1-text'); if(pt) prevItem.text = pt.textContent || ''; }
           const cursorPos = prevItem.text.length;
           prevItem.text = prevItem.text + item.text;
           todo1Items.splice(idx, 1);
