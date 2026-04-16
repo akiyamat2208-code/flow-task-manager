@@ -816,6 +816,19 @@ const TODO1_KEY = 'flow-task-todo1-v1';
 const MEMO_MAX = 6, MEMO_MIN = 1;
 let memoCols = 3;
 let todo1Items = []; // [{id, text, done}]
+let todo1History = []; // undo stack
+const TODO1_HISTORY_MAX = 50;
+
+function pushTodo1History(){
+  todo1History.push(JSON.stringify(todo1Items));
+  if(todo1History.length > TODO1_HISTORY_MAX) todo1History.shift();
+}
+
+function undoTodo1(){
+  if(!todo1History.length) return;
+  todo1Items = JSON.parse(todo1History.pop());
+  renderTodo1(); saveTodo1();
+}
 
 /* --- First-domain TODO panel --- */
 function saveTodo1(){
@@ -879,12 +892,19 @@ function makeTodo1Row(item){
     scheduleSaveTodo1();
   });
   txt.addEventListener('keydown', e => {
+    // Cmd+Z / Ctrl+Z: undo
+    if((e.metaKey || e.ctrlKey) && e.key === 'z'){
+      e.preventDefault();
+      undoTodo1();
+      return;
+    }
     if(e.key === 'Enter'){
       if(e.shiftKey){
         // Shift+Enter: 行内改行
         return;
       }
       e.preventDefault();
+      pushTodo1History();
       const idx = todo1Items.findIndex(x=>x.id===item.id);
 
       // カーソル位置でテキストを分割
@@ -948,6 +968,7 @@ function makeTodo1Row(item){
     }
     if(e.key === 'Backspace' && txt.textContent === ''){
       e.preventDefault();
+      pushTodo1History();
       const idx = todo1Items.findIndex(x=>x.id===item.id);
       todo1Items.splice(idx, 1);
       renderTodo1();
@@ -956,6 +977,46 @@ function makeTodo1Row(item){
         if(prev){ const t=prev.querySelector('.todo1-text'); if(t){ t.focus(); placeCursorAtEnd(t); } }
       }
       saveTodo1();
+    }
+    // Delete キーで行頭にいるとき → この行を上の行末に結合
+    if(e.key === 'Delete'){
+      const sel = window.getSelection();
+      const isAtEnd = sel && sel.rangeCount > 0 &&
+        sel.getRangeAt(0).toString() === '' &&
+        sel.getRangeAt(0).startOffset === (txt.textContent || '').length;
+      if(isAtEnd){
+        const idx = todo1Items.findIndex(x=>x.id===item.id);
+        if(idx < todo1Items.length-1){
+          e.preventDefault();
+          pushTodo1History();
+          // 次の行のテキストをこの行末に結合
+          const nextItem = todo1Items[idx+1];
+          const mergedText = item.text + nextItem.text;
+          const cursorPos = item.text.length;
+          item.text = mergedText;
+          todo1Items.splice(idx+1, 1);
+          renderTodo1();
+          // カーソルを結合位置に
+          const curRow = document.getElementById(`t1-${item.id}`);
+          if(curRow){
+            const t = curRow.querySelector('.todo1-text');
+            if(t){
+              t.focus();
+              try {
+                const r = document.createRange();
+                const s = window.getSelection();
+                const node = t.firstChild || t;
+                const pos = Math.min(cursorPos, (t.textContent||'').length);
+                r.setStart(node === t ? t : node, node === t ? 0 : pos);
+                r.collapse(true);
+                s.removeAllRanges();
+                s.addRange(r);
+              } catch(err){ placeCursorAtEnd(t); }
+            }
+          }
+          saveTodo1();
+        }
+      }
     }
   });
   txt.addEventListener('blur', () => {
