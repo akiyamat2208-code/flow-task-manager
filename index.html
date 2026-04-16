@@ -871,17 +871,53 @@ function makeTodo1Row(item){
   txt.addEventListener('keydown', e => {
     if(e.key === 'Enter'){
       if(e.shiftKey){
-        // Shift+Enter: 行内改行（ブラウザのデフォルト動作）
+        // Shift+Enter: 行内改行
         return;
       }
-      // Enter: 新しいチェックボックス付きアイテムを追加
       e.preventDefault();
       const idx = todo1Items.findIndex(x=>x.id===item.id);
-      const newItem = {id:uid(), text:'', done:false};
+
+      // カーソル位置でテキストを分割
+      const sel = window.getSelection();
+      let beforeText = '', afterText = '';
+      if(sel && sel.rangeCount > 0){
+        const range = sel.getRangeAt(0);
+        // カーソルより前のテキスト
+        const rangeBefore = document.createRange();
+        rangeBefore.setStart(txt, 0);
+        rangeBefore.setEnd(range.startContainer, range.startOffset);
+        beforeText = rangeBefore.toString();
+        // カーソルより後のテキスト
+        const rangeAfter = document.createRange();
+        rangeAfter.setStart(range.endContainer, range.endOffset);
+        rangeAfter.setEnd(txt, txt.childNodes.length);
+        afterText = rangeAfter.toString();
+      } else {
+        beforeText = item.text;
+        afterText = '';
+      }
+
+      // 現在のアイテムをカーソル前のテキストに更新
+      item.text = beforeText;
+      // 新しいアイテムにカーソル後のテキストを入れる
+      const newItem = {id:uid(), text:afterText, done:false};
       todo1Items.splice(idx+1, 0, newItem);
       renderTodo1();
+      // 新しい行の先頭にフォーカス
       const newRow = document.getElementById(`t1-${newItem.id}`);
-      if(newRow){ const t=newRow.querySelector('.todo1-text'); if(t){t.focus();} }
+      if(newRow){
+        const t = newRow.querySelector('.todo1-text');
+        if(t){
+          t.focus();
+          // カーソルを先頭に
+          const r = document.createRange();
+          const s = window.getSelection();
+          r.setStart(t, 0);
+          r.collapse(true);
+          s.removeAllRanges();
+          s.addRange(r);
+        }
+      }
       saveTodo1();
     }
     if(e.key === 'Backspace' && txt.textContent === ''){
