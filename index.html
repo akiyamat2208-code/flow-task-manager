@@ -892,6 +892,9 @@ function makeTodo1Row(item){
     scheduleSaveTodo1();
   });
   txt.addEventListener('keydown', e => {
+    // IME変換中は全てのキー操作を無視
+    if(e.isComposing || e.keyCode === 229) return;
+
     // Cmd+Z / Ctrl+Z: undo
     if((e.metaKey || e.ctrlKey) && e.key === 'z'){
       e.preventDefault();
@@ -966,36 +969,42 @@ function makeTodo1Row(item){
         if(next){ const t=next.querySelector('.todo1-text'); if(t){ t.focus(); } }
       }
     }
-    if(e.key === 'Backspace' && txt.textContent === ''){
-      e.preventDefault();
-      pushTodo1History();
-      const idx = todo1Items.findIndex(x=>x.id===item.id);
-      todo1Items.splice(idx, 1);
-      renderTodo1();
-      if(idx > 0){
-        const prev = document.getElementById(`t1-${todo1Items[idx-1].id}`);
-        if(prev){ const t=prev.querySelector('.todo1-text'); if(t){ t.focus(); placeCursorAtEnd(t); } }
-      }
-      saveTodo1();
-    }
     // Delete キーで行頭にいるとき → この行のテキストを上の行末に結合
-    if(e.key === 'Delete'){
+    if(e.key === 'Delete' || e.key === 'Backspace'){
+      const isBackspace = e.key === 'Backspace';
       const sel = window.getSelection();
-      const isAtStart = sel && sel.rangeCount > 0 &&
-        sel.getRangeAt(0).toString() === '' &&
-        sel.getRangeAt(0).startOffset === 0;
-      if(isAtStart){
+      const atStart = sel && sel.rangeCount > 0 &&
+        sel.getRangeAt(0).collapsed &&
+        sel.getRangeAt(0).startOffset === 0 &&
+        (!sel.getRangeAt(0).startContainer.previousSibling) &&
+        (sel.getRangeAt(0).startContainer === txt ||
+         sel.getRangeAt(0).startContainer === txt.firstChild);
+
+      const isEmpty = txt.textContent === '';
+
+      if((isBackspace && (isEmpty || atStart)) || (!isBackspace && atStart)){
         const idx = todo1Items.findIndex(x=>x.id===item.id);
-        if(idx > 0){
-          e.preventDefault();
-          pushTodo1History();
-          // 上の行のテキストにこの行のテキストを結合
+        if(isBackspace && idx === 0 && !isEmpty) return; // 先頭行で内容あり→通常削除
+        if(!isBackspace && idx === 0) return; // 先頭行でDelete→何もしない
+
+        e.preventDefault();
+        pushTodo1History();
+
+        if(isBackspace && isEmpty){
+          // 空行をBackspace: 行削除して上の行末へ
+          todo1Items.splice(idx, 1);
+          renderTodo1();
+          if(idx > 0){
+            const prev = document.getElementById(`t1-${todo1Items[idx-1].id}`);
+            if(prev){ const t=prev.querySelector('.todo1-text'); if(t){ t.focus(); placeCursorAtEnd(t); } }
+          }
+        } else {
+          // 行頭でBackspace または 行頭でDelete: 上の行末に結合
           const prevItem = todo1Items[idx-1];
-          const cursorPos = prevItem.text.length; // 上の行末の位置
+          const cursorPos = prevItem.text.length;
           prevItem.text = prevItem.text + item.text;
           todo1Items.splice(idx, 1);
           renderTodo1();
-          // 上の行のカーソル位置（結合箇所）にフォーカス
           const prevRow = document.getElementById(`t1-${prevItem.id}`);
           if(prevRow){
             const t = prevRow.querySelector('.todo1-text');
@@ -1013,8 +1022,8 @@ function makeTodo1Row(item){
               } catch(err){ placeCursorAtEnd(t); }
             }
           }
-          saveTodo1();
         }
+        saveTodo1();
       }
     }
   });
